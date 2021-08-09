@@ -10,7 +10,7 @@ import time
 
 
 def calc_macd(df, fastperiod=12, slowperiod=26, signalperiod=9):
-    df['close'] = df['close'].astype(float)
+    df['最新价'] = df['close'].astype(float)
     ewma12 = df['close'].ewm(alpha=2 / 13, adjust=False).mean()
     ewma26 = df['close'].ewm(alpha=2 / 27, adjust=False).mean()
     df['dif'] = ewma12 - ewma26
@@ -55,11 +55,13 @@ def calc_ma(df):
     df['ma25'] = df['close'].rolling(25).mean().fillna(method='bfill')
     df['ma55'] = df['close'].rolling(55).mean().fillna(method='bfill')
     df['ma60'] = df['close'].rolling(60).mean().fillna(method='bfill')
+    df['ma200'] = df['close'].rolling(200).mean().fillna(method='bfill')
     df['ma5'] = df['ma5'].astype('float64')
     df['ma20'] = df['ma20'].astype('float64')
     df['ma25'] = df['ma25'].astype('float64')
     df['ma55'] = df['ma55'].astype('float64')
     df['ma60'] = df['ma60'].astype('float64')
+    df['ma200'] = df['ma200'].astype('float64')
     return df
 
 
@@ -526,7 +528,8 @@ def TFST(df):  # 25-60
         if df.loc[len(df)-1,'ma5']>=df.loc[len(df)-1,'ma25'] and df.loc[len(df)-2,'ma5']<df.loc[len(df)-2,'ma25'] and df.loc[len(df)-1,'mavol5']<df.loc[len(df)-2,'mavol60'] and df.loc[len(df)-1,'mavol5']>df.loc[len(df)-2,'mavol5']:
             TFSTvalue=6  #ma5上穿ma25，mavol5小于mavol60
     return TFSTvalue
-def MA2055(df):
+
+def MA2055(df): #中线MA20-55
     MA2055value='                      '
     if df.loc[len(df)-1,'ma20']>df.loc[len(df)-1,'ma55'] and df.loc[len(df)-2,'ma20']>df.loc[len(df)-2,'ma55'] and df.loc[len(df)-3,'ma20']>df.loc[len(df)-3,'ma55']:
         MA2055value=MA2055value+'MA20-55中线多头'
@@ -537,6 +540,22 @@ def MA2055(df):
     if df.loc[len(df)-1,'ma20']<df.loc[len(df)-1,'ma55'] and df.loc[len(df)-2,'ma20']>df.loc[len(df)-2,'ma55']:
         MA2055value=MA2055value+'MA20-55中线死叉转跌'
     return(MA2055value)
+
+def MA200(df): #长线MA200
+    MA200value=' '
+    if len(df) < 200: return(MA200value)
+    if df.loc[len(df)-1,'close']>df.loc[len(df)-1,'ma200'] and df.loc[len(df)-2,'close']<df.loc[len(df)-2,'ma200'] and (df.loc[len(df)-2,'close']+df.loc[len(df)-3,'close']+df.loc[len(df)-4,'close'])/3<df.loc[len(df)-1,'ma200']:
+        MA200value=MA200value+'MA200模型：股价突破ma200，长线上涨突破信号确认'
+    return(MA200value)
+
+def plus2560(df): #激进版25-60,KDJ金叉当天，MACD低点，MA5在MA25下且最后一天拐头，MA25多头
+    plus2560value=' '
+    if len(df) < 5: return(plus2560value)
+    if df.loc[len(df)-1,'j']>df.loc[len(df)-1,'k'] and df.loc[len(df)-2,'j']<= df.loc[len(df)-2,'k'] and df.loc[len(df)-1,'j']>df.loc[len(df)-2,'j'] and df.loc[len(df)-1,'bar']> df.loc[len(df)-2,'bar'] and df.loc[len(df)-1,'ma5']>df.loc[len(df)-2,'ma5'] and df.loc[len(df)-1,'ma5']<df.loc[len(df)-1,'ma25'] and df.loc[len(df)-1,'ma25']>df.loc[len(df)-2,'ma25'] and df.loc[len(df)-2,'ma25']>df.loc[len(df)-3,'ma25']:
+        #and df.loc[len(df)-1,'rsi_14']>df.loc[len(df)-2,'rsi_14'] and df.loc[len(df)-2,'rsi_14']<df.loc[len(df)-3,'rsi_14']:
+        plus2560value=plus2560value+'25-60激进买点，参考VOL，谨慎确认！！KDJ金叉当天，MACD低点，MA5在MA25下且最后一天拐头，MA25多头'
+    return(plus2560value)
+
 
 # ------------START
 #sqlselectstockcode = 'SELECT ts_code FROM ACSQuant.chinaaindustry;'
@@ -552,7 +571,7 @@ upcsvname = str(nowdate) + 'up.csv'
 downcsvname = str(nowdate) + 'down.csv'
 
 while time.strftime('%H:%M', time.localtime()) > '09:30' and time.strftime('%H:%M',
-                                                                           time.localtime()) < '23:00':  # 09-16HK,US时间需要修改！！！！！
+                                                                           time.localtime()) < '23:30':  # 09-16HK,US时间需要修改！！！！！
     nowtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
     process = 0  # 进度计数
 
@@ -562,12 +581,10 @@ while time.strftime('%H:%M', time.localtime()) > '09:30' and time.strftime('%H:%
     print('取到EM实时数据', nowtime)
 
     upwarddf = pd.DataFrame(
-        columns=['date', 'time', 'price', 'code', 'mode', 'opportunity', '1day', '3days', '5days', '10days', '30days',
-                 'oppositedays', 'sum', 'maxdays', 'max'])
+        columns=[ 'time', 'code', 'name','price', 'opportunity'])
     # upwarddf是上涨机会结果df表
     downwarddf = pd.DataFrame(
-        columns=['date', 'time', 'price', 'code', 'mode', 'opportunity', '1day', '3days', '5days', '10days', '30days',
-                 'oppositedays', 'sum', 'maxdays', 'max'])
+        columns=['time', 'code', 'name','price', 'opportunity'])
     # downwarddf是下跌机会结果df表
 
     # 开始遍历industry里的每一只股票
@@ -651,6 +668,8 @@ while time.strftime('%H:%M', time.localtime()) > '09:30' and time.strftime('%H:%
         dfweekdata = daytoweek(dfhistemp)  # 日线转周线
         TFSTvalue = TFST(dfstockhisdata)  # 25-60
         MA2055value=MA2055(dfstockhisdata) #MA20-55
+        MA200value = MA200(dfstockhisdata)  # MA200
+        plus2560value = plus2560(dfstockhisdata)  # plus25-60
 
         for o in range(len(dfhold) - 1):
             if code == str(dfhold.loc[o, 'code']):
@@ -678,15 +697,23 @@ while time.strftime('%H:%M', time.localtime()) > '09:30' and time.strftime('%H:%
         if TFSTvalue == 1:
             print(nowtime + '  \033[1;31;40m' + tablename + df.loc[0, '名称'] + '  25-60买入信号！！\033[0m')
             print(MA2055value)
+            upwarddf.loc[len(upwarddf) + 1] = {'time': nowtime,'code': tablename,'name':df.loc[0, '名称'],'price':df.loc[len(df)-1,'最新价'],'opportunity': '25-60买入信号！！'}
+
         if TFSTvalue==4:
             print(nowtime + '  \033[1;31;40m' + tablename + df.loc[0, '名称'] + '  25-60 ma5即将上穿ma25，留意机会！！\033[0m')
             print(MA2055value)
+            upwarddf.loc[len(upwarddf) + 1] = {'time': nowtime,'code': tablename,'name':df.loc[0, '名称'],'price':df.loc[len(df)-1,'最新价'],'opportunity': '25-60 ma5即将上穿ma25，留意机会！！'}
+
         if TFSTvalue == 5:
             print(nowtime + '  \033[1;31;40m' + tablename + df.loc[0, '名称'] + '  25-60 vol5-vol60金叉，留意机会！！\033[0m')
             print(MA2055value)
+            upwarddf.loc[len(upwarddf) + 1] = {'time': nowtime,'code': tablename,'name':df.loc[0, '名称'],'price':df.loc[len(df)-1,'最新价'],'opportunity': '25-60 vol5-vol60金叉，留意机会！！'}
+
         if TFSTvalue==6:
             print(nowtime + '  \033[1;31;40m' + tablename + df.loc[0, '名称'] + '  25-60 ma5-ma25金叉，mavol5<mavol60留意机会！！\033[0m')
             print(MA2055value)
+            upwarddf.loc[len(upwarddf) + 1] = {'time': nowtime,'code': tablename,'name':df.loc[0, '名称'],'price':df.loc[len(df)-1,'最新价'],'opportunity': '25-60 ma5-ma25金叉，mavol5<mavol60留意机会！！'}
+
 
         #量价-换手率
         if df.loc[0, '量比'] != '-' and int(df.loc[0, '量比']) > 1 and int(df.loc[0, '换手率'] >= 2):
@@ -828,11 +855,21 @@ while time.strftime('%H:%M', time.localtime()) > '09:30' and time.strftime('%H:%
                     ma) + vpriceandma + '\033[1;33;40m' + vamount + '\033[0m' + vcr + vrsi_6 + qrrstr(
                     df.loc[0, '量比']) + turnoverrate(df.loc[0, '换手率']))
                 print(judgeweek(dfweekdata))
+        #MA200
+        if MA200value!=' ':
+            print(str(lastdate) + '\033[0m  ' + upcolor + tablename + df.loc[0, '名称'] +MA200value+ '\033[0m')
+
+        # 激进版25-60,KDJ金叉后一天，MACD低点，MA5在MA25下且最后一天拐头，MA25多头，RSI-14低点拐头
+        if plus2560value != ' ':
+            print(str(lastdate) + '\033[0m  ' + upcolor + tablename + df.loc[0, '名称']  + plus2560value+ '\033[0m')
+            upwarddf.loc[len(upwarddf) + 1] = {'time': nowtime,'code': tablename,'name':df.loc[0, '名称'],'price':df.loc[len(df)-1,'最新价'],'opportunity': '激进版25-60'}
+
+    print('===============================本次循环结束，机会列表===============================\n', upwarddf)
 
     # save csv
 
-    upwarddf.to_csv(upcsvname, index=False, mode='a')
-    downwarddf.to_csv(downcsvname, index=False, mode='a')
+    #upwarddf.to_csv(upcsvname, index=False, mode='a')
+    #downwarddf.to_csv(downcsvname, index=False, mode='a')
 else:
     print(str(nowdate) + '已收盘')
 
